@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Score Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f9fafb;
+        }
+        .player-card {
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            background-color: #ffffff;
+        }
+        .player-card:hover {
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+        }
+        .borrow-history {
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: white;
+            text-align: center;
+        }
+        .borrow-history th, .borrow-history td {
+            padding: 5px 10px;
+            text-align: center;
+        }
+        .modal {
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+        .styled-input {
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 10px;
+            width: 90%;
+            margin: 10px 0;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .styled-input:focus {
+            outline: none;
+            border-color: #4caf50;
+            box-shadow: 0 0 5px rgba(76, 175, 80, 0.5);
+        }
+    </style>
+</head>
+<body>
+
+<div id="app" class="container mx-auto p-6">
+    <h1 class="text-4xl font-bold text-center mb-6 text-teal-600">Game Score Tracker</h1>
+
+    <!-- Add Player Section -->
+    <div class="flex justify-center mb-6">
+        <input type="text" v-model="newPlayerName" placeholder="Enter player name" class="border rounded p-2 mx-2 w-1/4">
+        <input type="number" v-model="newStartingScore" placeholder="Starting Score" class="border rounded p-2 mx-2 w-1/4" min="-10" max="10">
+        <button @click="addPlayer" class="bg-teal-500 text-white px-4 py-2 rounded hover:bg-teal-700 ml-2">
+            Add Player
+        </button>
+    </div>
+
+   <!-- Players Table -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div class="player-card" v-for="(player, index) in players" :key="player.id">
+            <h2 class="text-lg font-semibold text-center">{{ player.name }}</h2>
+            <p class="text-center">Score: {{ player.score }}</p>
+            <div class="flex flex-col items-center">
+                <input type="number" v-model="player.borrowAmount" min="1" max="10" placeholder="Borrow Amount" class="styled-input w-full">
+                <select v-model="player.lender" class="styled-input mt-2 w-full">
+                    <option value="" disabled>Select a lender</option>
+                    <option v-for="(lender, lenderIndex) in players" :key="lender.id" :value="lenderIndex" v-if="lenderIndex !== index">
+                        {{ lender.name }}
+                    </option>
+                </select>                         
+            </div>
+            <div class="flex justify-center mt-4 space-x-4">
+                <button v-if="players.length > 1" @click="endTurn(index)" class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-700 transition duration-200">OK</button>
+                <button @click="openRemoveModal(player)" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-700 transition duration-200">Remove</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Confirmation -->
+    <div id="removeModal" class="modal" v-if="showRemoveModal">
+        <div class="modal-content">
+            <h3 class="text-lg font-semibold">Confirm Removal</h3>
+            <p>Are you sure you want to remove {{ playerToRemove.name }}?</p>
+            <button @click="confirmRemove" class="bg-red-500 text-white px-4 py-2 rounded mr-2">Yes, Remove</button>
+            <button @click="cancelRemove" class="bg-gray-500 text-white px-4 py-2 rounded">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Borrow History Section -->
+    <h2 class="text-2xl font-bold text-center mt-6">Borrow History</h2>
+    <table class="borrow-history w-full bg-white shadow-md rounded-lg">
+        <thead>
+            <tr class="bg-teal-500 text-white">
+                <th v-for="player in players" :key="player.id">{{ player.name }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td v-for="player in players" :key="player.id">{{ player.startingScore }}</td>
+            </tr>
+            <tr v-for="(entry, roundIndex) in borrowHistory" :key="roundIndex">
+                <td v-for="(player, playerIndex) in players" :key="player.id">
+                    {{ entry[playerIndex] !== undefined ? entry[playerIndex] : '' }}
+                </td>
+            </tr>
+            <tr>
+                <td v-for="player in players" :key="player.id">
+                    {{ player.score }}
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- Total Scores Section -->
+    <h2 class="text-2xl font-bold text-center mt-6">Total Scores</h2>
+    <div class="flex justify-center mt-2">
+        <div class="border rounded p-4 bg-white shadow-md mx-2">
+            <p class="font-semibold">Total Positive Score: {{ totalPositive }}</p>
+        </div>
+        <div class="border rounded p-4 bg-white shadow-md mx-2">
+            <p class="font-semibold">Total Negative Score: {{ totalNegative }}</p>
+        </div>
+    </div>
+
+    <!-- Starting Score Section -->
+    <h2 class="text-2xl font-bold text-center mt-6">Starting Score</h2>
+    <p class="text-xl text-center">{{ startingScore }}</p>
+</div>
+
+<script type="module" src="index.js"></script>
+</body
